@@ -24,8 +24,6 @@ app.include_router(admin.router, prefix="/admin")
 app.include_router(swap.router, prefix="/swap")
 app.include_router(referral.router, prefix="/referral")
 
-# Mount frontend folder (optional static homepage)
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
