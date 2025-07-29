@@ -33,11 +33,11 @@ async def root():
         <body>
             <h1>🚀 UFO MLM Backend is Live!</h1>
             <ul>
-                <li><a href="/docs">API Docs</a></li>
-                <li><a href="/auth/register">/auth/register</a> → Register endpoint</li>
-                <li><a href="/auth/login">/auth/login</a> → Login endpoint</li>
-                <li><a href="/admin/dashboard">/admin/dashboard</a> → Admin Dashboard</li>
-                <li><a href="/swap/calculate">/swap/calculate</a> → ROI Calculator</li>
+                <li><a href="/docs" target="_blank">API Docs</a></li>
+                <li><a href="/auth/register" target="_blank">/auth/register</a> → Register endpoint</li>
+                <li><a href="/auth/login" target="_blank">/auth/login</a> → Login endpoint</li>
+                <li><a href="/admin/dashboard" target="_blank">/admin/dashboard</a> → Admin Dashboard</li>
+                <li><a href="/swap/calculate" target="_blank">/swap/calculate</a> → ROI Calculator</li>
             </ul>
         </body>
     </html>
