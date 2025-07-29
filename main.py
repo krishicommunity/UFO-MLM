@@ -1,17 +1,46 @@
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from routers import auth, users, wallet, roi, admin, swap, referral
 
 app = FastAPI(title="UFO MLM Backend API")
 
-# Include all routers
-app.include_router(auth.router)
-app.include_router(users.router)
-app.include_router(wallet.router)
-app.include_router(roi.router)
-app.include_router(admin.router)
-app.include_router(swap.router)
-app.include_router(referral.router)
+# Optional: Allow CORS if frontend is separate
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # or restrict to your frontend domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.get("/")
-def root():
-    return {"message": "UFO MLM Backend is Live!"}
+# Include all routers
+app.include_router(auth.router, prefix="/auth")
+app.include_router(users.router, prefix="/users")
+app.include_router(wallet.router, prefix="/wallet")
+app.include_router(roi.router, prefix="/roi")
+app.include_router(admin.router, prefix="/admin")
+app.include_router(swap.router, prefix="/swap")
+app.include_router(referral.router, prefix="/referral")
+
+# Mount frontend folder (optional static homepage)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    return """
+    <html>
+        <head><title>UFO MLM</title></head>
+        <body>
+            <h1>🚀 UFO MLM Backend is Live!</h1>
+            <ul>
+                <li><a href="/docs">API Docs</a></li>
+                <li><a href="/auth/register">/auth/register</a> → Register endpoint</li>
+                <li><a href="/auth/login">/auth/login</a> → Login endpoint</li>
+                <li><a href="/admin/dashboard">/admin/dashboard</a> → Admin Dashboard</li>
+                <li><a href="/swap/calculate">/swap/calculate</a> → ROI Calculator</li>
+            </ul>
+        </body>
+    </html>
+    """
