@@ -23,7 +23,7 @@ class LoginRequest(BaseModel):
     password: str
 
 # Configure your email credentials
-SMTP_EMAIL = "info.ufokrishi@gmail.com"
+SMTP_EMAIL = "nextaimindia@gmail.com"
 SMTP_PASSWORD = "your-email-password"  # use your Gmail app password here
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
