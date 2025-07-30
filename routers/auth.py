@@ -23,8 +23,8 @@ class LoginRequest(BaseModel):
     password: str
 
 # Configure your email credentials
-SMTP_EMAIL = "nextaimindia@gmail.com"
-SMTP_PASSWORD = "SMTP_PASSWORD"  # use your Gmail app password here
+SMTP_EMAIL = os.getenv("SMTP_EMAIL")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
