@@ -1,23 +1,24 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr
-import random
-import os
-import smtplib
-import time
-import string
+import random, string, time, os, smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from passlib.context import CryptContext
+from utils.jwt_handler import create_access_token
+from datetime import timedelta
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-# Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# In-memory stores
-otp_store = {}         # {email: (otp, timestamp)}
-pending_users = {}     # {email: {name, sponsor_id, mobile}}
-users_db = {}          # {user_id: {user_data}}
+otp_store = {}
+users_db = {}
+
+# ENV config
+SMTP_EMAIL = os.getenv("SMTP_EMAIL")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
 
 # Models
 class RegisterRequest(BaseModel):
@@ -31,16 +32,10 @@ class VerifyOTPRequest(BaseModel):
     otp: str
 
 class LoginRequest(BaseModel):
-    user_id: str
+    email: EmailStr
     password: str
 
-# SMTP Config
-SMTP_EMAIL = os.getenv("SMTP_EMAIL") or "nextaimindia@gmail.com"
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD") or "your_app_password_here"  # use actual app password
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
-
-# --- Helper Functions ---
+# Email sender
 def send_email_otp(to_email, otp):
     msg = MIMEMultipart("alternative")
     msg["Subject"] = "Your UFO OTP Code"
@@ -54,17 +49,17 @@ def send_email_otp(to_email, otp):
     server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
     server.quit()
 
-def send_login_credentials(to_email, user_id, password):
+def send_credentials(to_email, user_id, password):
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = "🎉 Welcome to UFO MLM - Your Login Info"
+    msg["Subject"] = "Your UFO Account Credentials"
     msg["From"] = SMTP_EMAIL
     msg["To"] = to_email
     html = f"""
     <html><body>
-        <h2>Welcome to UFO MLM!</h2>
-        <p><b>User ID:</b> {user_id}<br>
-           <b>Password:</b> {password}</p>
-        <p>🔐 Please change your password after login.</p>
+    <h3>Welcome to UFO MLM Platform</h3>
+    <p><strong>User ID:</strong> {user_id}<br>
+    <strong>Password:</strong> {password}</p>
+    <p>Login and change your password anytime from your dashboard.</p>
     </body></html>
     """
     msg.attach(MIMEText(html, "html"))
@@ -74,62 +69,47 @@ def send_login_credentials(to_email, user_id, password):
     server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
     server.quit()
 
-def generate_user_id():
-    return "UFO" + ''.join(random.choices(string.digits, k=6))
-
-def generate_password():
-    return ''.join(random.choices(string.ascii_letters + string.digits + "@#$!", k=10))
-
-# --- Routes ---
+# Endpoints
 @router.post("/register")
 def register_user(req: RegisterRequest):
-    if req.email in otp_store or req.email in pending_users:
-        raise HTTPException(status_code=400, detail="OTP already sent or user already pending verification.")
     otp = str(random.randint(100000, 999999))
-    otp_store[req.email] = (otp, time.time())
-    pending_users[req.email] = {
-        "name": req.name,
-        "sponsor_id": req.sponsor_id,
-        "mobile": req.mobile
-    }
+    otp_store[req.email] = {"otp": otp, "timestamp": time.time(), "data": req}
     send_email_otp(req.email, otp)
-    return {"message": "OTP sent to your email (valid 5 mins)."}
+    return {"message": "OTP sent to your email"}
 
 @router.post("/verify")
 def verify_otp(req: VerifyOTPRequest):
-    otp_data = otp_store.get(req.email)
-    if not otp_data:
-        raise HTTPException(status_code=400, detail="OTP not found or expired.")
-
-    otp, timestamp = otp_data
-    if time.time() - timestamp > 300:
-        otp_store.pop(req.email, None)
-        raise HTTPException(status_code=400, detail="OTP expired.")
-    if req.otp != otp:
+    record = otp_store.get(req.email)
+    if not record:
+        raise HTTPException(status_code=400, detail="OTP not found or expired")
+    if time.time() - record["timestamp"] > 300:
+        del otp_store[req.email]
+        raise HTTPException(status_code=400, detail="OTP expired")
+    if req.otp != record["otp"]:
         raise HTTPException(status_code=400, detail="Invalid OTP")
 
-    user_data = pending_users.pop(req.email)
-    otp_store.pop(req.email, None)
-
-    user_id = generate_user_id()
-    raw_password = generate_password()
+    reg_data = record["data"]
+    user_id = f"UFO{random.randint(100000, 999999)}"
+    raw_password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
     hashed_password = pwd_context.hash(raw_password)
 
-    users_db[user_id] = {
+    users_db[reg_data.email] = {
         "user_id": user_id,
-        "name": user_data["name"],
-        "email": req.email,
-        "mobile": user_data["mobile"],
-        "sponsor_id": user_data["sponsor_id"],
+        "sponsor_id": reg_data.sponsor_id,
+        "name": reg_data.name,
+        "email": reg_data.email,
+        "mobile": reg_data.mobile,
         "password": hashed_password
     }
 
-    send_login_credentials(req.email, user_id, raw_password)
-    return {"message": "Registration complete. Login credentials sent to email.", "user_id": user_id}
+    send_credentials(reg_data.email, user_id, raw_password)
+    del otp_store[req.email]
+    return {"message": "Registration complete", "user_id": user_id}
 
 @router.post("/login")
 def login_user(req: LoginRequest):
-    user = users_db.get(req.user_id)
+    user = users_db.get(req.email)
     if not user or not pwd_context.verify(req.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {"message": "Login successful", "token": "demo-token"}
+    token = create_access_token(data={"sub": user["user_id"]}, expires_delta=timedelta(minutes=60))
+    return {"access_token": token, "token_type": "bearer"}
