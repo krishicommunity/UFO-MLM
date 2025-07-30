@@ -24,7 +24,7 @@ class LoginRequest(BaseModel):
 
 # Configure your email credentials
 SMTP_EMAIL = "nextaimindia@gmail.com"
-SMTP_PASSWORD = "your-email-password"  # use your Gmail app password here
+SMTP_PASSWORD = "SMTP_PASSWORD"  # use your Gmail app password here
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
