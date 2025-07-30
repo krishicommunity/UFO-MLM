@@ -3,3 +3,5 @@ uvicorn
 pydantic
 email-validator
 passlib[bcrypt]
+python-jose
+python-dotenv
