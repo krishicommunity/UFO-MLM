@@ -83,9 +83,11 @@ def verify_otp(req: VerifyOTPRequest):
     record = otp_store.get(req.email)
     if not record:
         raise HTTPException(status_code=400, detail="OTP not found or expired")
+    
     if time.time() - record["timestamp"] > 300:
         del otp_store[req.email]
         raise HTTPException(status_code=400, detail="OTP expired")
+    
     if req.otp != record["otp"]:
         raise HTTPException(status_code=400, detail="Invalid OTP")
 
@@ -94,35 +96,40 @@ def verify_otp(req: VerifyOTPRequest):
     raw_password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
     hashed_password = pwd_context.hash(raw_password)
 
+    # Insert user
     db["users"].insert_one({
-    "user_id": user_id,
-    "sponsor_id": reg_data.sponsor_id,
-    "name": reg_data.name,
-    "email": reg_data.email,
-    "mobile": reg_data.mobile,
-    "password": hashed_password
-})
+        "user_id": user_id,
+        "sponsor_id": reg_data.sponsor_id,
+        "name": reg_data.name,
+        "email": reg_data.email,
+        "mobile": reg_data.mobile,
+        "password": hashed_password
+    })
 
-# Create wallet for new user
-db["wallets"].insert_one({
-    "user_id": user_id,
-    "deposit_usdt": 0.0,
-    "income_usdt": 0.0,
-    "withdrawable_krishi": 0.0,
-    "frozen_krishi": 0.0
-})
+    # Create wallet
+    db["wallets"].insert_one({
+        "user_id": user_id,
+        "deposit_usdt": 0.0,
+        "income_usdt": 0.0,
+        "withdrawable_krishi": 0.0,
+        "frozen_krishi": 0.0
+    })
 
-# Send login credentials to user's email
-send_credentials(reg_data.email, user_id, raw_password)
+    # Send credentials
+    send_credentials(reg_data.email, user_id, raw_password)
 
-# Remove OTP from memory and confirm registration
-del otp_store[req.email]
-return {"message": "Registration complete", "user_id": user_id}
+    # Clear OTP
+    del otp_store[req.email]
+
+    return {"message": "Registration complete", "user_id": user_id}
+
 
 @router.post("/login")
 def login_user(req: LoginRequest):
-    user = users_db.get(req.email)
+    user = db["users"].find_one({"email": req.email})
     if not user or not pwd_context.verify(req.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    
     token = create_access_token(data={"sub": user["user_id"]}, expires_delta=timedelta(minutes=60))
     return {"access_token": token, "token_type": "bearer"}
+
