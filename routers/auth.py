@@ -1,3 +1,4 @@
+from database import db
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr
 import random, string, time, os, smtplib
@@ -93,18 +94,28 @@ def verify_otp(req: VerifyOTPRequest):
     raw_password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
     hashed_password = pwd_context.hash(raw_password)
 
-    users_db[reg_data.email] = {
-        "user_id": user_id,
-        "sponsor_id": reg_data.sponsor_id,
-        "name": reg_data.name,
-        "email": reg_data.email,
-        "mobile": reg_data.mobile,
-        "password": hashed_password
-    }
+    db["users"].insert_one({
+    "user_id": user_id,
+    "sponsor_id": reg_data.sponsor_id,
+    "name": reg_data.name,
+    "email": reg_data.email,
+    "mobile": reg_data.mobile,
+    "password": hashed_password
+})
 
+# Create wallet for new user
+db["wallets"].insert_one({
+    "user_id": user_id,
+    "deposit_usdt": 0.0,
+    "income_usdt": 0.0,
+    "withdrawable_krishi": 0.0,
+    "frozen_krishi": 0.0
+})
+    
     send_credentials(reg_data.email, user_id, raw_password)
     del otp_store[req.email]
     return {"message": "Registration complete", "user_id": user_id}
+
 
 @router.post("/login")
 def login_user(req: LoginRequest):
