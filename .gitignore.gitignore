@@ -1,0 +1,9 @@
+# Ignore everything
+*
+
+# Allow only project files
+!main.py
+!requirements.txt
+!routers/
+!utils/
+!.env
