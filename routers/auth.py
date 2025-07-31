@@ -111,11 +111,13 @@ db["wallets"].insert_one({
     "withdrawable_krishi": 0.0,
     "frozen_krishi": 0.0
 })
-    
-    send_credentials(reg_data.email, user_id, raw_password)
-    del otp_store[req.email]
-    return {"message": "Registration complete", "user_id": user_id}
 
+# Send login credentials to user's email
+send_credentials(reg_data.email, user_id, raw_password)
+
+# Remove OTP from memory and confirm registration
+del otp_store[req.email]
+return {"message": "Registration complete", "user_id": user_id}
 
 @router.post("/login")
 def login_user(req: LoginRequest):
