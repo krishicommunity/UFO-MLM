@@ -1,4 +1,4 @@
-from ..database import db
+from database import db
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr
 import random, string, time, os, smtplib
