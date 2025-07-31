@@ -1,5 +1,6 @@
 # update check
 # File: utils/jwt_handler.py
+from ..utils.jwt_handler import create_access_token
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 
