@@ -7,7 +7,6 @@ import random, string, time, os, smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from passlib.context import CryptContext
-from utils.jwt_handler import create_access_token
 from datetime import timedelta
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
