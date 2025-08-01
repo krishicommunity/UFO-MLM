@@ -3,6 +3,9 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from src.routers import auth, users, wallet, roi, admin, swap, referral
+from src.database import db
+print("✅ Import test success from main.py")
+
 
 app = FastAPI(title="UFO MLM Backend API")
 
