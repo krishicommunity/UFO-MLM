@@ -1,15 +1,19 @@
 from pymongo import MongoClient
 import os
 
+print("✅ database.py loaded")
+
 MONGO_URI = os.getenv("MONGO_URI")
 
-print("✅ database.py loaded")
-print("✅ MONGO_URI:", MONGO_URI)
+if not MONGO_URI:
+    raise Exception("❌ MONGO_URI is not set in environment")
 
-if MONGO_URI is None:
-    raise Exception("❌ MONGO_URI environment variable is NOT SET!")
+print("✅ Connecting to MongoDB:", MONGO_URI)
 
 client = MongoClient(MONGO_URI)
 db = client["ufo"]
 
-print("✅ DB Connection initialized:", db)
+print("✅ MongoDB database 'ufo' initialized")
+
+# Confirm export
+print("✅ db object:", db)
