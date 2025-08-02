@@ -73,7 +73,7 @@ def send_credentials(to_email, user_id, password):
 # Endpoints
 @router.post("/register")
 def register_user(req: RegisterRequest):
-    # ✅ Allow special ROOT sponsor for first user
+    # ✅ Allow first sponsor as ROOT
     if req.sponsor_id != "ROOT":
         sponsor = db.users.find_one({"user_id": req.sponsor_id})
         if not sponsor:
