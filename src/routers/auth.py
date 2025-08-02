@@ -110,7 +110,6 @@ def verify_otp(req: VerifyOTPRequest):
 
 @router.post("/login")
 def login_user(req: LoginRequest):
-    # Try to find user by either email or user_id (username)
     user = db.users.find_one({
         "$or": [
             {"email": req.identifier},
@@ -118,8 +117,15 @@ def login_user(req: LoginRequest):
         ]
     })
 
-    if not user or not pwd_context.verify(req.password, user["password"]):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
 
-    token = create_access_token(data={"sub": user["user_id"]}, expires_delta=timedelta(minutes=60))
+    if not pwd_context.verify(req.password, user["password"]):
+        raise HTTPException(status_code=401, detail="Invalid password")
+
+    token = create_access_token(
+        data={"sub": user["user_id"]}, 
+        expires_delta=timedelta(minutes=60)
+    )
+
     return {"access_token": token, "token_type": "bearer"}
