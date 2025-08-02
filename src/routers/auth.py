@@ -14,7 +14,6 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 otp_store = {}
-users_db = {}
 
 # ENV config
 SMTP_EMAIL = os.getenv("SMTP_EMAIL")
@@ -95,14 +94,14 @@ def verify_otp(req: VerifyOTPRequest):
     raw_password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
     hashed_password = pwd_context.hash(raw_password)
 
-    users_db[reg_data.email] = {
-        "user_id": user_id,
-        "sponsor_id": reg_data.sponsor_id,
-        "name": reg_data.name,
-        "email": reg_data.email,
-        "mobile": reg_data.mobile,
-        "password": hashed_password
-    }
+    db.users.insert_one({
+    "user_id": user_id,
+    "sponsor_id": reg_data.sponsor_id,
+    "name": reg_data.name,
+    "email": reg_data.email,
+    "mobile": reg_data.mobile,
+    "password": hashed_password
+})
 
     send_credentials(reg_data.email, user_id, raw_password)
     del otp_store[req.email]
