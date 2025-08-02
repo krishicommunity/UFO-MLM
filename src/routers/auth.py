@@ -73,6 +73,12 @@ def send_credentials(to_email, user_id, password):
 # Endpoints
 @router.post("/register")
 def register_user(req: RegisterRequest):
+    # ✅ Allow special ROOT sponsor for first user
+    if req.sponsor_id != "ROOT":
+        sponsor = db.users.find_one({"user_id": req.sponsor_id})
+        if not sponsor:
+            raise HTTPException(status_code=404, detail="Sponsor ID not found")
+
     otp = str(random.randint(100000, 999999))
     otp_store[req.email] = {"otp": otp, "timestamp": time.time(), "data": req}
     send_email_otp(req.email, otp)
