@@ -34,7 +34,7 @@ class VerifyOTPRequest(BaseModel):
     otp: str
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    identifier: str  # Can be email or username
     password: str
 
 # Email sender
@@ -110,8 +110,16 @@ def verify_otp(req: VerifyOTPRequest):
 
 @router.post("/login")
 def login_user(req: LoginRequest):
-    user = users_db.get(req.email)
+    # Try to find user by either email or user_id (username)
+    user = db.users.find_one({
+        "$or": [
+            {"email": req.identifier},
+            {"user_id": req.identifier}
+        ]
+    })
+
     if not user or not pwd_context.verify(req.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
     token = create_access_token(data={"sub": user["user_id"]}, expires_delta=timedelta(minutes=60))
     return {"access_token": token, "token_type": "bearer"}
