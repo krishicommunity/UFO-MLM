@@ -86,32 +86,42 @@ def register_user(req: RegisterRequest):
 
 @router.post("/verify")
 def verify_otp(req: VerifyOTPRequest):
-    record = otp_store.get(req.email)
-    if not record:
-        raise HTTPException(status_code=400, detail="OTP not found or expired")
-    if time.time() - record["timestamp"] > 300:
+    try:
+        record = otp_store.get(req.email)
+        if not record:
+            raise HTTPException(status_code=400, detail="OTP not found or expired")
+        if time.time() - record["timestamp"] > 300:
+            del otp_store[req.email]
+            raise HTTPException(status_code=400, detail="OTP expired")
+        if req.otp != record["otp"]:
+            raise HTTPException(status_code=400, detail="Invalid OTP")
+
+        reg_data = record["data"]
+
+        # DEBUG
+        print(f"✅ OTP verified for: {reg_data.email}, sponsor: {reg_data.sponsor_id}")
+
+        user_id = f"UFO{random.randint(100000, 999999)}"
+        raw_password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+        hashed_password = pwd_context.hash(raw_password)
+
+        # 👇 May fail if MongoDB is not working or field missing
+        db.users.insert_one({
+            "user_id": user_id,
+            "sponsor_id": reg_data.sponsor_id,
+            "name": reg_data.name,
+            "email": reg_data.email,
+            "mobile": reg_data.mobile,
+            "password": hashed_password
+        })
+
+        send_credentials(reg_data.email, user_id, raw_password)
         del otp_store[req.email]
-        raise HTTPException(status_code=400, detail="OTP expired")
-    if req.otp != record["otp"]:
-        raise HTTPException(status_code=400, detail="Invalid OTP")
+        return {"message": "Registration complete", "user_id": user_id}
 
-    reg_data = record["data"]
-    user_id = f"UFO{random.randint(100000, 999999)}"
-    raw_password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-    hashed_password = pwd_context.hash(raw_password)
-
-    db.users.insert_one({
-    "user_id": user_id,
-    "sponsor_id": reg_data.sponsor_id,
-    "name": reg_data.name,
-    "email": reg_data.email,
-    "mobile": reg_data.mobile,
-    "password": hashed_password
-})
-
-    send_credentials(reg_data.email, user_id, raw_password)
-    del otp_store[req.email]
-    return {"message": "Registration complete", "user_id": user_id}
+    except Exception as e:
+        print(f"❌ Error in verify_otp: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @router.post("/login")
 def login_user(req: LoginRequest):
