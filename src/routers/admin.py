@@ -41,3 +41,22 @@ def block_or_unblock_user(req: UserControlRequest):
 
     mock_users[req.email]["status"] = "blocked" if req.action == "block" else "active"
     return {"message": f"User {req.email} is now {mock_users[req.email]['status']}"}
+
+@router.post("/distribute_partner_pool")
+def distribute_partner_pool(beneficiary_list: List[dict], krishi_rate: float = 0.012):
+    """
+    beneficiary_list: List of {user_id, percent}
+    krishi_rate: Current KRISHI USDT price
+    """
+    pool_amount = get_partner_pool_balance()
+    for item in beneficiary_list:
+        uid = item["user_id"]
+        pct = item["percent"] / 100
+        usdt_part = pool_amount * pct * 0.70
+        krishi_part = (pool_amount * pct * 0.30) / krishi_rate
+        credit_wallet(uid, usdt_part, "usdt_income_wallet")
+        credit_wallet(uid, krishi_part, "krishi_wallet")
+        log_bonus(uid, "partner_pool", usdt_part, krishi_part)
+    reset_partner_pool()
+    return {"status": "success", "message": "Partner pool distributed successfully"}
+
