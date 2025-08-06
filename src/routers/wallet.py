@@ -63,3 +63,16 @@ def stake_krishi(user_id: str, amount: float):
     distribute_stake_upline_income(user_id, amount)
 
     return {"status": "success", "message": f"{amount} KRISHI successfully staked for 36 months. Upline rewarded."}
+
+@router.get("/my_stakes")
+def get_user_stakes(user_id: str):
+    active = db.stakes.find({"user_id": user_id, "status": "pending"})
+    matured = db.stakes.find({"user_id": user_id, "status": "completed"})
+    return {
+        "active_stakes": list(active),
+        "matured_stakes": list(matured)
+    }
+@router.get("/my_krishi_bonus")
+def get_krishi_bonus_logs(user_id: str):
+    logs = db.bonus_logs.find({"user_id": user_id, "coin_type": "KRISHI"}).sort("date", -1)
+    return {"krishi_bonus_history": list(logs)}
