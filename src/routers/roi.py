@@ -30,6 +30,17 @@ def generate_daily_roi(req: ROICalcRequest):
         "krishi_rate_used": krishi_rate,
         "status": "Daily ROI Added"
     }
+    def add_to_partner_pool(new_activation_amount: float = 0):
+    """Add 5% of activations & 0.25% of yesterday’s closing balance."""
+    if new_activation_amount > 0:
+        pool_fund = new_activation_amount * 0.05
+        credit_partner_pool(pool_fund, source="activation")
+
+    # Daily run at 12:01AM
+    closing_balance = get_system_closing_balance()
+    daily_yield = closing_balance * 0.0025
+    credit_partner_pool(daily_yield, source="daily_yield")
+
 def check_and_trigger_diamond_bonus(user_id, total_team_business, direct_exec_count):
     if direct_exec_count >= 5 and total_team_business >= 100000:
         if not user_has_active_diamond_bonus(user_id):  # Write this check separately
