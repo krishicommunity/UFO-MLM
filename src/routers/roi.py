@@ -33,5 +33,11 @@ def generate_daily_roi(req: ROICalcRequest):
 def check_and_trigger_diamond_bonus(user_id, total_team_business, direct_exec_count):
     if direct_exec_count >= 5 and total_team_business >= 100000:
         if not user_has_active_diamond_bonus(user_id):  # Write this check separately
-            start_bonus_cycle(user_id, amount=total_team_business * 0.001, duration=50, bonus_type="diamond")
+            start_bonus_cycle(user_id, amount=total_team_business * 0.001, duration=100, bonus_type="diamond")
             print(f"Diamond Bonus activated for {user_id}")
+            
+def check_and_trigger_team_leader_bonus(user_id, total_downline_business, active_directs, has_exec_direct):
+    if active_directs >= 5 and has_exec_direct and total_downline_business >= 100000:
+        if not user_has_active_leader_bonus(user_id):
+            start_bonus_cycle(user_id, amount=total_downline_business * 0.0001, duration=100, bonus_type="leader")
+            print(f"Team Leader Bonus activated for {user_id}")
