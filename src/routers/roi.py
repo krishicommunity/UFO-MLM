@@ -52,3 +52,13 @@ def check_and_trigger_team_leader_bonus(user_id, total_downline_business, active
         if not user_has_active_leader_bonus(user_id):
             start_bonus_cycle(user_id, amount=total_downline_business * 0.0001, duration=100, bonus_type="leader")
             print(f"Team Leader Bonus activated for {user_id}")
+def check_and_unlock_user_stakes():
+    stakes = get_all_matured_stakes(today_date())  # Returns list of matured entries
+    for stake in stakes:
+        user_id = stake["user_id"]
+        amount = stake["amount"]
+        multiplier = stake.get("return_multiplier", 2)
+        unlock_amount = amount * multiplier
+        update_user_balance(user_id, unlock_amount, wallet_type="krishi_withdrawable_wallet")
+        mark_stake_as_completed(stake["stake_id"])
+        log_bonus(user_id, "stake_maturity", unlock_amount)
