@@ -30,3 +30,8 @@ def generate_daily_roi(req: ROICalcRequest):
         "krishi_rate_used": krishi_rate,
         "status": "Daily ROI Added"
     }
+def check_and_trigger_diamond_bonus(user_id, total_team_business, direct_exec_count):
+    if direct_exec_count >= 5 and total_team_business >= 100000:
+        if not user_has_active_diamond_bonus(user_id):  # Write this check separately
+            start_bonus_cycle(user_id, amount=total_team_business * 0.001, duration=50, bonus_type="diamond")
+            print(f"Diamond Bonus activated for {user_id}")
