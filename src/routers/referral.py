@@ -22,3 +22,14 @@ def get_direct_referrals(req: ReferralRequest):
         "direct_referrals": direct,
         "count": len(direct)
     }
+def distribute_stake_upline_income(user_id: str, staked_amount: float):
+    upline_ids = get_upline_list(user_id, max_levels=10)
+    level_percentages = [0.03, 0.02, 0.01] + [0.005] * 7  # Levels 4–10
+
+    for i, upline_id in enumerate(upline_ids):
+        if i >= 10:
+            break
+        level_pct = level_percentages[i]
+        krishi_income = staked_amount * level_pct
+        update_user_balance(upline_id, krishi_income, wallet_type="krishi_withdrawable_wallet")
+        log_bonus(upline_id, "stake_level_income", krishi_income, level=i+1)
