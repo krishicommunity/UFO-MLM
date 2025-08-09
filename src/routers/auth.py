@@ -1,146 +1,163 @@
-# update check
-from src.database import db
-from src.utils.jwt_handler import create_access_token
-from fastapi import APIRouter, HTTPException
+# app/routers/auth.py
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, EmailStr
-import random, string, time, os, smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from passlib.context import CryptContext
-from datetime import timedelta
+from app.db.mongo import get_db
+from app.utils.security import hash_password, verify_password, make_jwt, generate_password
+from app.utils.emailer import send_otp, verify_otp, send_welcome_email
+from app.utils.refcode import generate_ref_code, generate_login_code
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+router = APIRouter(prefix="/auth", tags=["Auth"])
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-otp_store = {}
-
-# ENV config
-SMTP_EMAIL = os.getenv("SMTP_EMAIL")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
-
-# Models
-class RegisterRequest(BaseModel):
-    sponsor_id: str
+# ===== Models =====
+class RegisterInit(BaseModel):
+    sponsor_id: str   # public sponsor code (e.g., UFO000001)
     name: str
-    email: EmailStr
     mobile: str
-
-class VerifyOTPRequest(BaseModel):
     email: EmailStr
-    otp: str
 
-class LoginRequest(BaseModel):
-    identifier: str  # Can be email or username
+class RegisterVerify(BaseModel):
+    email: EmailStr
+    otp_code: str
+
+class Login(BaseModel):
+    email: EmailStr
     password: str
 
-# Email sender
-def send_email_otp(to_email, otp):
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Your UFO OTP Code"
-    msg["From"] = SMTP_EMAIL
-    msg["To"] = to_email
-    html = f"<html><body><h2>Your OTP is: <strong>{otp}</strong></h2><p>Valid for 5 minutes.</p></body></html>"
-    msg.attach(MIMEText(html, "html"))
-    server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-    server.starttls()
-    server.login(SMTP_EMAIL, SMTP_PASSWORD)
-    server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
-    server.quit()
+# Built-in system sponsor codes that are ALWAYS treated as active
+SYSTEM_SPONSOR_CODES = {"ROOT", "UFO000001", "root@ufokrishi.com"}
 
-def send_credentials(to_email, user_id, password):
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Your UFO Account Credentials"
-    msg["From"] = SMTP_EMAIL
-    msg["To"] = to_email
-    html = f"""
-    <html><body>
-    <h3>Welcome to UFO MLM Platform</h3>
-    <p><strong>User ID:</strong> {user_id}<br>
-    <strong>Password:</strong> {password}</p>
-    <p>Login and change your password anytime from your dashboard.</p>
-    </body></html>
-    """
-    msg.attach(MIMEText(html, "html"))
-    server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-    server.starttls()
-    server.login(SMTP_EMAIL, SMTP_PASSWORD)
-    server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
-    server.quit()
+# ===== Optional helper to check sponsor from UI =====
+@router.get("/check-sponsor")
+async def check_sponsor(code: str = Query(...)):
+    db = get_db()
+    if code in SYSTEM_SPONSOR_CODES:
+        return {"active": True, "sponsor": {"name": "System Sponsor", "package_activated": True}}
+    sp = await db.users.find_one({"referral_code": code}, {"_id": 0, "package_activated": 1, "name": 1})
+    if not sp:
+        raise HTTPException(404, "Sponsor code not found")
+    return {"active": bool(sp.get("package_activated")), "sponsor": sp}
 
-# Endpoints
-@router.post("/register")
-def register_user(req: RegisterRequest):
-    # ✅ Allow first sponsor as ROOT
-    if req.sponsor_id != "ROOT":
-        sponsor = db.users.find_one({"user_id": req.sponsor_id})
+# ===== STEP 1: Init registration (send OTP) =====
+@router.post("/register-init")
+async def register_init(data: RegisterInit):
+    db = get_db()
+
+    # Email must not already exist
+    if await db.users.find_one({"email": data.email}):
+        raise HTTPException(400, "Email already exists")
+
+    # Resolve sponsor
+    if data.sponsor_id in SYSTEM_SPONSOR_CODES:
+        sponsor_user_id = "system-root"
+        sponsor_code = data.sponsor_id
+        sponsor_active = True
+    else:
+        sponsor = await db.users.find_one({"referral_code": data.sponsor_id})
         if not sponsor:
-            raise HTTPException(status_code=404, detail="Sponsor ID not found")
+            raise HTTPException(400, "Sponsor code not found")
+        sponsor_active = bool(sponsor.get("package_activated"))
+        if not sponsor_active:
+            raise HTTPException(400, "Non Active Sponcer — registration blocked")
+        sponsor_user_id = sponsor["user_id"]
+        sponsor_code = data.sponsor_id
 
-    otp = str(random.randint(100000, 999999))
-    otp_store[req.email] = {"otp": otp, "timestamp": time.time(), "data": req}
-    send_email_otp(req.email, otp)
-    return {"message": "OTP sent to your email"}
-
-@router.post("/verify")
-def verify_otp(req: VerifyOTPRequest):
-    try:
-        record = otp_store.get(req.email)
-        if not record:
-            raise HTTPException(status_code=400, detail="OTP not found or expired")
-        if time.time() - record["timestamp"] > 300:
-            del otp_store[req.email]
-            raise HTTPException(status_code=400, detail="OTP expired")
-        if req.otp != record["otp"]:
-            raise HTTPException(status_code=400, detail="Invalid OTP")
-
-        reg_data = record["data"]
-
-        # DEBUG
-        print(f"✅ OTP verified for: {reg_data.email}, sponsor: {reg_data.sponsor_id}")
-
-        user_id = f"UFO{random.randint(100000, 999999)}"
-        raw_password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-        hashed_password = pwd_context.hash(raw_password)
-
-        # 👇 May fail if MongoDB is not working or field missing
-        db.users.insert_one({
-            "user_id": user_id,
-            "sponsor_id": reg_data.sponsor_id,
-            "name": reg_data.name,
-            "email": reg_data.email,
-            "mobile": reg_data.mobile,
-            "password": hashed_password
-        })
-
-        send_credentials(reg_data.email, user_id, raw_password)
-        del otp_store[req.email]
-        return {"message": "Registration complete", "user_id": user_id}
-
-    except Exception as e:
-        print(f"❌ Error in verify_otp: {e}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
-
-@router.post("/login")
-def login_user(req: LoginRequest):
-    user = db.users.find_one({
-        "$or": [
-            {"email": req.identifier},
-            {"user_id": req.identifier}
-        ]
-    })
-
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-
-    if not pwd_context.verify(req.password, user["password"]):
-        raise HTTPException(status_code=401, detail="Invalid password")
-
-    token = create_access_token(
-        data={"sub": user["user_id"]}, 
-        expires_delta=timedelta(minutes=60)
+    # Store/refresh pending registration
+    await db.pending_regs.update_one(
+        {"email": str(data.email)},
+        {"$set": {
+            "email": str(data.email),
+            "name": data.name,
+            "mobile": data.mobile,
+            "sponsor_code": sponsor_code,
+            "sponsor_user_id": sponsor_user_id,
+        }},
+        upsert=True
     )
 
-    return {"access_token": token, "token_type": "bearer"}
+    # Send OTP (cooldown handled inside)
+    info = send_otp(str(data.email))
+    if not info.get("sent"):
+        raise HTTPException(429, f"Please wait {info.get('retry_after',60)} seconds before resending OTP")
+
+    return {"status": "otp_sent", "retry_after": info.get("retry_after", 60)}
+
+# ===== STEP 2: Verify OTP and create user =====
+@router.post("/register-verify")
+async def register_verify(data: RegisterVerify):
+    db = get_db()
+
+    # 1) OTP check
+    if not verify_otp(str(data.email), data.otp_code):
+        raise HTTPException(400, "Invalid or expired OTP")
+
+    # 2) Load pending
+    pending = await db.pending_regs.find_one({"email": str(data.email)})
+    if not pending:
+        raise HTTPException(400, "No pending registration found; please start again")
+
+    sponsor_user_id = pending.get("sponsor_user_id")
+    sponsor_code = pending.get("sponsor_code")
+
+    # 3) Sponsor re-check (allow system-root bypass)
+    if sponsor_user_id != "system-root":
+        sp = await db.users.find_one({"user_id": sponsor_user_id})
+        if not sp or not sp.get("package_activated"):
+            raise HTTPException(400, "Sponsor inactive; use another sponsor")
+
+    # 4) Generate codes & password
+    # unique referral_code
+    while True:
+        my_ref = generate_ref_code()
+        exists = await db.users.find_one({"referral_code": my_ref})
+        if not exists:
+            break
+    login_code = generate_login_code()
+    raw_password = generate_password(10)
+
+    # 5) Create user (internal ID remains email)
+    user_id = str(data.email)
+    await db.users.insert_one({
+        "user_id": user_id,
+        "email": str(data.email),
+        "password": hash_password(raw_password),
+        "name": pending["name"],
+        "mobile": pending["mobile"],
+        "sponsor_id": sponsor_user_id,   # "system-root" or actual user_id
+        "sponsor_code": sponsor_code,    # public code used at signup
+        "referral_code": my_ref,         # new public code for this user
+        "login_code": login_code,        # optional UI login code
+        "package_activated": False,
+        "package_tier": None,
+        "total_invested_usd": 0.0,
+        "usdt_wallet": 0.0,
+        "usdt_income_wallet": 0.0,
+        "krishi_withdrawable_wallet": 0.0,
+        "krishi_frozen_wallet": 0.0,
+        "flags": {
+            "user_blocked": False,
+            "withdrawal_locked": False,
+            "roi_blocked": False
+        }
+    })
+
+    # 6) Clean pending + email credentials
+    await db.pending_regs.delete_one({"email": str(data.email)})
+    send_welcome_email(str(data.email), pending["name"], login_code, raw_password)
+
+    # 7) Return creds to show in popup
+    return {
+        "status": "registered",
+        "login_id": login_code,
+        "password": raw_password,
+        "referral_code": my_ref
+    }
+
+# ===== Normal email login =====
+@router.post("/login")
+async def login(data: Login):
+    db = get_db()
+    u = await db.users.find_one({"email": data.email})
+    if not u or not verify_password(data.password, u["password"]):
+        raise HTTPException(400, "Invalid credentials")
+    token = make_jwt(u["user_id"])
+    return {"token": token, "user_id": u["user_id"]}
